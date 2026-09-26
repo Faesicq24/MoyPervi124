@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ВСПЫШКА — пиксельный мультфильм</title>
+<style>
+  :root { --bg: #0b0a12; --fg: #e9e4ff; --mut: #8a86a0; --acc: #ffb35a; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--bg); color: var(--fg); font-family: ui-monospace, Menlo, Consolas, monospace; overflow: hidden; }
+  #wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  #stage { position: relative; width: min(100vw, calc(100vh * 16 / 9)); aspect-ratio: 16 / 9; background: #000; box-shadow: 0 0 60px rgba(0,0,0,.6); }
+  #screen { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+  #start { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 14px; padding-bottom: 7%; background: linear-gradient(transparent 40%, rgba(0,0,0,.75)); }
+  .btn { font: inherit; cursor: pointer; border: 2px solid #ffffff33; background: #1b1530cc; color: var(--fg); padding: 10px 20px; border-radius: 10px; font-size: 15px; letter-spacing: .05em; }
+  .btn:hover { border-color: var(--acc); color: #fff; }
+  .big { font-size: 20px; padding: 14px 32px; border-color: var(--acc); background: #2a1b40ee; }
+  .note { color: var(--mut); font-size: 12px; text-align: center; max-width: 560px; line-height: 1.5; }
+  #bar { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 14px 12px; display: flex; align-items: center; gap: 10px; background: linear-gradient(transparent, rgba(0,0,0,.8)); opacity: 0; transition: opacity .25s; }
+  #stage:hover #bar { opacity: 1; }
+  body.recording #bar, body.recording #start { display: none !important; }
+  #bar button { font: inherit; background: none; border: 0; color: var(--fg); cursor: pointer; font-size: 13px; padding: 4px 8px; border-radius: 6px; }
+  #bar button:hover { background: #ffffff1a; }
+  #time { font-size: 12px; color: var(--mut); min-width: 86px; text-align: center; }
+  #seek { position: relative; flex: 1; height: 8px; background: #ffffff22; border-radius: 4px; cursor: pointer; touch-action: none; }
+  #fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--acc); border-radius: 4px; pointer-events: none; }
+  .tick { position: absolute; top: -2px; width: 2px; height: 12px; background: #ffffff55; pointer-events: none; }
+  #tip { position: absolute; bottom: 16px; transform: translateX(-50%); background: #000c; padding: 3px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap; pointer-events: none; display: none; }
+  #rec-ind { position: absolute; top: 12px; left: 14px; color: #ff5a5a; font-size: 13px; display: none; text-shadow: 0 0 4px #000; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage">
+    <canvas id="screen" width="1920" height="1080"></canvas>
+    <div id="rec-ind">● Идёт запись видео (3 минуты). Не сворачивайте вкладку.</div>
+    <div id="start">
+      <button class="btn big" id="bigplay">▶ СМОТРЕТЬ МУЛЬТФИЛЬМ</button>
+      <button class="btn" id="recbtn">Записать и скачать видео (1080p)</button>
+      <div class="note">Включите звук. Пробел: пауза. Стрелки: ±5 с. F: полный экран. M: звук. На полосе перемотки отмечены главы.</div>
+    </div>
+    <div id="bar">
+      <button id="play">▶</button>
+      <span id="time">0:00 / 3:00</span>
+      <div id="seek"><div id="fill"></div><div id="tip"></div></div>
+      <button id="mute">ЗВУК</button>
+      <button id="rec">ЗАПИСЬ</button>
+      <button id="fs">ЭКРАН</button>
+    </div>
+  </div>
+</div>
+<script src="js/core.js"></script>
+<script src="js/sprites.js"></script>
+<script src="js/props.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/sets1.js"></script>
+<script src="js/sets2.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/scenes1.js"></script>
+<script src="js/scenes2.js"></script>
+<script src="js/scenes3.js"></script>
+<script src="js/player.js"></script>
+</body>
+</html>
