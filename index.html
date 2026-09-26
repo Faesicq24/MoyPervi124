@@ -32941,9 +32941,9 @@ void main(){
         tDiffuse: { value: null },
         tMask: { value: null },
         uTexel: { value: new eA(1 / 960, 1 / 540) },
-        uColor: { value: new nA(1.5, 1.42, 1.25) },
+        uColor: { value: new nA(1, 0.94, 0.78) },
         uOn: { value: 0 },
-        uFill: { value: 0.035 },
+        uFill: { value: 0.012 },
       },
       vertexShader:
         "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
@@ -32957,13 +32957,15 @@ void main(){
       vec4 c = texture2D(tDiffuse, vUv);
       if (uOn > 0.5) {
         float m = texture2D(tMask, vUv).r;
-        float d = 0.0;
-        for (int i = 0; i < 12; i++) {
-          float a = float(i) * 0.5235988;
-          d = max(d, texture2D(tMask, vUv + vec2(cos(a), sin(a)) * uTexel * 1.6).r);
+        // Thin 1px line plus a faint 2.5px halo instead of the old fat 3px band.
+        float d = 0.0, h = 0.0;
+        for (int i = 0; i < 8; i++) {
+          vec2 dir = vec2(cos(float(i) * 0.7853982), sin(float(i) * 0.7853982)) * uTexel;
+          d = max(d, texture2D(tMask, vUv + dir * 1.15).r);
+          h = max(h, texture2D(tMask, vUv + dir * 2.5).r);
         }
-        float edge = clamp(d - m, 0.0, 1.0);
-        c.rgb = mix(c.rgb, uColor, edge * 0.85) + uColor * m * uFill;
+        float edge = clamp(d - m, 0.0, 1.0) * 0.55 + clamp(h - d, 0.0, 1.0) * 0.12;
+        c.rgb = mix(c.rgb, uColor, edge) + uColor * m * uFill;
       }
       gl_FragColor = c;
     }`,
@@ -32976,15 +32978,15 @@ void main(){
       pool = [];
       selection = [];
       constructor(A, I) {
-        ((this.mask = new zI(Math.max(1, A >> 1), Math.max(1, I >> 1), {
+        ((this.mask = new zI(Math.max(1, A), Math.max(1, I), {
           depthBuffer: !1,
         })),
           (this.pass.uniforms.tMask.value = this.mask.texture),
           (this.scene.matrixWorldAutoUpdate = !1));
       }
       setSize(A, I) {
-        (this.mask.setSize(Math.max(1, A >> 1), Math.max(1, I >> 1)),
-          this.pass.uniforms.uTexel.value.set(2 / A, 2 / I));
+        (this.mask.setSize(Math.max(1, A), Math.max(1, I)),
+          this.pass.uniforms.uTexel.value.set(1 / A, 1 / I));
       }
       update(A, I) {
         let g = 0;
@@ -52661,33 +52663,60 @@ varying vec3 vONrm;`,
       b.quaternion.setFromUnitVectors(JI(0, 0, 1), JI(1, 0, 0)));
     for (let tA of FQ(yk(), n)) b.add(tA);
     R.add(b);
+    // Horn pad on the hub and a light stalk on the column: clickable cockpit controls.
+    let hp = new WA();
+    (hp.add(
+      new cA(fA(0.11, 0.075, 0.014, 0.006, JI(0, -0.008, 0.042)), IQ("knob", n)),
+    ),
+      hp.add(
+        new cA(
+          vC(0.016, 0.016, 0.004, JI(0, -0.008, 0.05), Math.PI / 2, 0, 0, 20),
+          IQ("chrome", n),
+        ),
+      ),
+      L.add(hp));
+    let ls = new WA();
+    (ls.position.set(-0.052, -0.004, -0.12),
+      ls.rotation.set(0, 0, -0.18),
+      ls.add(
+        new cA(
+          vC(0.006, 0.0075, 0.13, JI(-0.065, 0, 0), 0, 0, Math.PI / 2, 10),
+          IQ("knob", n),
+        ),
+      ),
+      ls.add(
+        new cA(
+          vC(0.0105, 0.0105, 0.032, JI(-0.14, 0, 0), 0, 0, Math.PI / 2, 12),
+          IQ("knob", n),
+        ),
+      ),
+      R.add(ls));
+    // One group for the whole head unit so hover/outline covers body, screen, knobs and buttons.
+    let rG = new WA();
+    i.add(rG);
     let W = new cA(
       fA(0.2, 0.105, 0.02, 0.008, JI(0, 0.83, 0.3)),
       IQ("switch", n),
     );
-    i.add(W);
+    rG.add(W);
     let j = new cA(new PI(0.12, 0.032), s);
-    ((j.rotation.y = Math.PI), j.position.set(0, 0.848, 0.2895), i.add(j));
+    ((j.rotation.y = Math.PI), j.position.set(0, 0.848, 0.2895), rG.add(j));
     for (let tA of [-0.078, 0.078]) {
       let MA = new cA(
         new VA(0.014, 0.015, 0.016, 20).rotateX(Math.PI / 2),
         IQ("knob", n),
       );
-      (MA.position.set(tA, 0.845, 0.284), i.add(MA));
+      ((MA.userData.sub = tA > 0 ? "power" : "tune"),
+        MA.position.set(tA, 0.845, 0.284),
+        rG.add(MA));
     }
-    for (let tA = 0; tA < 6; tA++)
-      i.add(
-        new cA(
-          fA(
-            0.022,
-            0.012,
-            0.006,
-            0.003,
-            JI(-0.0675 + tA * 0.027, 0.803, 0.288),
-          ),
-          IQ("knob", n),
-        ),
+    for (let tA = 0; tA < 6; tA++) {
+      let MA = new cA(
+        fA(0.022, 0.012, 0.006, 0.003, JI(-0.0675 + tA * 0.027, 0.803, 0.288)),
+        IQ("knob", n),
       );
+      ((MA.userData.sub = "preset" + (5 - tA)), rG.add(MA));
+    }
     mt(e, 94.2, !1);
     let oA = new WA();
     oA.position.copy(Ht);
@@ -52748,7 +52777,9 @@ varying vec3 vONrm;`,
         needleMat: o,
       },
       lamps: a,
-      radio: { body: W, display: e, screen: s },
+      radio: { body: W, display: e, screen: s, group: rG },
+      hornPad: hp,
+      lightStalk: ls,
       key: b,
       gearLever: oA,
       handbrake: O,
@@ -53005,7 +53036,11 @@ varying vec3 vONrm;`,
           r && (r.root.userData.slot = n);
         }
         ((this.visual.key.userData.control = "key"),
-          (this.visual.radio.body.userData.control = "radio"),
+          (this.visual.radio.group.userData.control = "radio"),
+          (this.visual.hornPad.userData.control = "horn"),
+          (this.visual.lightStalk.userData.control = "lights"),
+          (this.visual.gearLever.userData.control = "gear"),
+          (this.visual.handbrake.userData.control = "handbrake"),
           (this.visual.glovebox.userData.control = "glovebox"),
           (this.visual.fuelCap.userData.control = "fuelcap"),
           this.visual.fuelCap.traverse((n) => (n.userData.control = "fuelcap")),
@@ -55302,7 +55337,8 @@ varying vec3 vONrm;`,
       }
       update(A, I, g) {
         for (let C of this.items) {
-          if (C.held || C.inInventory) continue;
+          // Carried items keep their physics body: sync the mesh too, otherwise it stays on the floor.
+          if (C.inInventory || (C.held && !C.body)) continue;
           if (C.body) {
             let E = C.body.translation(),
               t = C.body.rotation();
@@ -55313,12 +55349,13 @@ varying vec3 vONrm;`,
               (C.wy = E.y),
               (C.wz = E.z + this.originZ),
               C.quat.copy(C.obj.quaternion),
-              E.y < -200)
+              E.y < -200 && !C.held)
             ) {
               this.remove(C);
               continue;
             }
           }
+          if (C.held) continue;
           let Q = Math.hypot(C.wx - A, C.wz - I);
           C.body && (Q > 90 || !g(C.wx, C.wz))
             ? this.removeBody(C)
@@ -59915,12 +59952,26 @@ normal = perturbDetail(-vViewPosition, normal, vec2(dFdx(hDet), dFdy(hDet)) * uB
             .applyMatrix4(Zt.copy(e.matrixWorld).invert())
             .add(gC(0.02, -0.03, 0.08));
         (A.pos.copy(s), Yl(s, Sh.r, gC(1, 0.4, 0), A.quat), (A.pose = "pinch"));
+      } else if (this.reachPt) {
+        // Reach for the clicked control with the nearer hand.
+        let t = this.g.player.camera,
+          o = g
+            .localToWorld(this.reachPt)
+            .applyMatrix4(Zt.copy(t.matrixWorld).invert()),
+          e = o.x < -0.12,
+          s = e ? I : A;
+        (o.add(gC(e ? -0.02 : 0.02, -0.035, 0.075)),
+          s.pos.copy(o),
+          Yl(o, e ? Sh.l : Sh.r, gC(e ? -1 : 1, 0.4, 0), s.quat),
+          (s.pose = "point"));
       }
     }
     reachKey = !1;
+    reachPt = null;
     update(A, I, g) {
       let C = this.g;
       ((this.reachKey = !!g.reachKey),
+        (this.reachPt = g.reach ?? null),
         (this.grab = Math.max(0, this.grab - A * 3.5)));
       let Q =
           C.mode !== "play" ||
@@ -60016,6 +60067,7 @@ normal = perturbDetail(-vViewPosition, normal, vec2(dFdx(hDet), dFdy(hDet)) * uB
       holding = null;
       acts = [];
       holdDist = 0.55;
+      carryRot = new nI();
       handObj = new WA();
       flashlight;
       flashOn = !1;
@@ -60096,8 +60148,11 @@ normal = perturbDetail(-vViewPosition, normal, vec2(dFdx(hDet), dFdy(hDet)) * uB
           A.spawnKey && this.g.worldgen.collected.add(A.spawnKey),
           (A.touched = !0),
           (A.spawnKey = null),
+          // Frozen spawns have no body yet; a carried item needs one to follow the view.
+          !A.body && !this.isViewModel(A) && this.g.items.makeBody(A),
           A.body && A.body.setGravityScale(0, !0),
           this.isViewModel(A) && this.g.items.removeBody(A),
+          this.carryRot.identity(),
           this.setHand(A),
           this.hands.kickGrab(),
           this.g.audio.play("pickup", { volume: 0.6 }));
@@ -60256,10 +60311,12 @@ normal = perturbDetail(-vViewPosition, normal, vec2(dFdx(hDet), dFdy(hDet)) * uB
             a,
             n,
             r,
-            c;
+            c,
+            sb;
           for (; o; ) {
             if (
-              (!a && o.userData.slot && ((a = o.userData.slot), (r = o)),
+              (!sb && !n && o.userData.sub && (sb = o.userData.sub),
+              !a && o.userData.slot && ((a = o.userData.slot), (r = o)),
               !n && o.userData.control && ((n = o.userData.control), (c = o)),
               o.userData.car)
             ) {
@@ -60274,6 +60331,7 @@ normal = perturbDetail(-vViewPosition, normal, vec2(dFdx(hDet), dFdy(hDet)) * uB
                   kind: "carctl",
                   car: s,
                   control: n,
+                  sub: sb,
                   point: t.point,
                   dist: t.distance,
                   obj: n === "dome" ? void 0 : c,
@@ -60322,6 +60380,8 @@ normal = perturbDetail(-vViewPosition, normal, vec2(dFdx(hDet), dFdy(hDet)) * uB
         let I = this.g,
           g = I.input;
         this.acts = [];
+        ((this.hornT = Math.max(0, this.hornT - A)),
+          (this.reachT = Math.max(0, this.reachT - A)));
         let C = "",
           Q = [],
           i = I.ui.lang,
@@ -60553,6 +60613,9 @@ normal = perturbDetail(-vViewPosition, normal, vec2(dFdx(hDet), dFdy(hDet)) * uB
         } else
           for (let n of this.acts)
             if (a(n.btn)) {
+              I.player.car &&
+                (t.kind === "carctl" || t.kind === "carpart") &&
+                this.reachTo(t);
               n.hold || n.tick
                 ? ((this.holding = n),
                   (this.holdT = 0),
@@ -60580,10 +60643,18 @@ normal = perturbDetail(-vViewPosition, normal, vec2(dFdx(hDet), dFdy(hDet)) * uB
           g.mouse.wheel &&
             o?.body &&
             (this.holdDist = yI(
-              this.holdDist - g.mouse.wheel * 0.12,
-              0.4,
-              1.8,
+              this.holdDist - g.mouse.wheel * 0.15,
+              0.45,
+              2.8,
             )),
+          o?.body &&
+            !I.player.car &&
+            Q.push(
+              J(
+                "R + мышь — вращать · Колесо — ближе / дальше",
+                "R + mouse — rotate · Wheel — closer / farther",
+              ),
+            ),
           !this.acts.length && (t.kind === "none" || t.kind === "carbody" || !C)
             ? (this.target = null)
             : (this.target = {
@@ -60693,47 +60764,12 @@ normal = perturbDetail(-vViewPosition, normal, vec2(dFdx(hDet), dFdy(hDet)) * uB
                     Q.audio.play("key_turn", { volume: 0.5 }));
                 },
               }))
-            : l === "radio"
-              ? (C(J("\u0420\u0430\u0434\u0438\u043E", "Radio")),
-                g.push(
-                  i.radioOn
-                    ? `${i.radioFreq.toFixed(1)} MHz \xB7 ${Q.audio.radio.stationName || J("\u043F\u043E\u043C\u0435\u0445\u0438", "static")}`
-                    : J(
-                        "\u0412\u044B\u043A\u043B\u044E\u0447\u0435\u043D\u043E",
-                        "Off",
-                      ),
-                ),
-                I({
-                  btn: "LMB",
-                  key: "\u041B\u041A\u041C",
-                  label: i.radioOn
-                    ? J(
-                        "\u0412\u044B\u043A\u043B\u044E\u0447\u0438\u0442\u044C",
-                        "Turn off",
-                      )
-                    : J(
-                        "\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u044C",
-                        "Turn on",
-                      ),
-                  run: () => {
-                    ((i.radioOn = !i.radioOn),
-                      Q.audio.play("click", { volume: 0.5 }));
-                  },
-                }),
-                I({
-                  btn: "E",
-                  key: J("\u041A\u043E\u043B\u0435\u0441\u043E", "Wheel"),
-                  label: J(
-                    "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430",
-                    "Tune",
-                  ),
-                }),
-                Q.input.mouse.wheel &&
-                  (i.radioFreq = yI(
-                    i.radioFreq - Q.input.mouse.wheel * 0.1,
-                    87.5,
-                    108,
-                  )))
+            : l === "radio" ||
+                l === "lights" ||
+                l === "horn" ||
+                l === "gear" ||
+                l === "handbrake"
+              ? this.cockpitTarget(l, A, i, I, g, C)
               : l === "glovebox"
                 ? (C(
                     J(
@@ -60888,7 +60924,7 @@ normal = perturbDetail(-vViewPosition, normal, vec2(dFdx(hDet), dFdy(hDet)) * uB
               `${J("\u0417\u0430\u0440\u044F\u0434", "Charge")}: ${Math.round((a.charge ?? 0) * 100)}% \xB7 ${(10.5 + (a.charge ?? 0) * 2.2).toFixed(1)} V`,
             ),
           r &&
-            !o &&
+            (!o || s.startsWith("door")) &&
             I({
               btn: "E",
               key: "E",
@@ -60914,6 +60950,18 @@ normal = perturbDetail(-vViewPosition, normal, vec2(dFdx(hDet), dFdy(hDet)) * uB
               },
             }),
           s.startsWith("seat") && !o && this.seatActions(i, c, I, s),
+          o &&
+            (s === "seat_d" || s === "seat_p") &&
+            Q.player.seat !== (s === "seat_d" ? "driver" : "passenger") &&
+            I({
+              btn: "E",
+              key: "E",
+              label: J("Пересесть", "Switch seat"),
+              run: () => {
+                let l = s === "seat_d" ? "driver" : "passenger";
+                (Q.player.enterCar(i, l), (i.driverSeated = l === "driver"));
+              },
+            }),
           s.startsWith("door") && !o)
         ) {
           let l =
@@ -61485,7 +61533,7 @@ normal = perturbDetail(-vViewPosition, normal, vec2(dFdx(hDet), dFdy(hDet)) * uB
                   i,
                   this.holdDist + Math.max(g.half.x, g.half.z) * 0.8,
                 )
-                .add(new y(0, -0.15, 0)),
+                .add(new y(0, -0.08, 0)),
               t = I.physics.castRay(
                 E.clone().setY(E.y + 1.5),
                 new y(0, -1, 0),
@@ -61506,10 +61554,13 @@ normal = perturbDetail(-vViewPosition, normal, vec2(dFdx(hDet), dFdy(hDet)) * uB
             }
             let a = g.mass > 30,
               n = a ? 5 : 12,
-              r = s.multiplyScalar(n);
-            (r.length() > 12 && r.setLength(12),
+              // Feed-forward the player's velocity so the item doesn't lag and rubber-band while walking.
+              r = s.multiplyScalar(n).add(I.player.vel);
+            (r.length() > 14 && r.setLength(14),
               g.body.setLinvel({ x: r.x, y: r.y, z: r.z }, !0));
-            let c = new nI().setFromEuler(new $I(0, I.player.yaw, 0)),
+            let c = new nI()
+                .setFromEuler(new $I(0, I.player.yaw, 0))
+                .multiply(this.carryRot),
               h = g.body.rotation(),
               D = new nI(h.x, h.y, h.z, h.w),
               l = c.clone().multiply(D.clone().invert());
@@ -61535,24 +61586,157 @@ normal = perturbDetail(-vViewPosition, normal, vec2(dFdx(hDet), dFdy(hDet)) * uB
               C?.kind === "carctl" &&
               C.control === "key" &&
               this.holding !== null))
-          : g && g.obj.parent === this.handObj
-            ? (Q = "hold")
-            : g?.body
-              ? (Q = "carry")
-              : this.acts.length &&
-                C &&
-                (Q =
-                  C.kind === "carctl" || C.kind === "poi" ? "point" : "hover"),
+          : // The Long Drive style: no arms when empty-handed or carrying a physics item.
+            (Q = g && g.obj.parent === this.handObj ? "hold" : "hidden"),
           this.hands.update(A, Q, {
             item: g,
             handObj: this.handObj,
             carried: g?.body ? g : null,
             reachKey: i,
+            reach:
+              this.reachT > 0 && this.reachCar === I.player.car ? this.reachPt : null,
             holdDist: this.holdDist,
           }));
       }
       kickRecoil() {
         this.recoil = 1;
+      }
+      hornT = 0;
+      reachT = 0;
+      reachPt = null;
+      reachCar = null;
+      // Hold R and move the mouse to turn a carried item (camera stays still meanwhile).
+      rotateCarried(A) {
+        let I = this.hand;
+        if (
+          !I?.body ||
+          I.obj.parent === this.handObj ||
+          this.g.player.car ||
+          !A.down("reload")
+        )
+          return !1;
+        let g = A.mouse;
+        return (
+          (g.dx || g.dy) &&
+            (this.carryRot
+              .premultiply(new nI().setFromAxisAngle(new y(1, 0, 0), g.dy * 0.006))
+              .premultiply(new nI().setFromAxisAngle(new y(0, 1, 0), g.dx * 0.006)),
+            (g.dx = 0),
+            (g.dy = 0)),
+          !0
+        );
+      }
+      reachTo(A) {
+        A.car &&
+          A.point &&
+          ((this.reachT = 0.5),
+          (this.reachCar = A.car),
+          (this.reachPt = A.car.worldToLocal(A.point)));
+      }
+      cockpitTarget(l, A, i, I, g, C) {
+        let Q = this.g,
+          show = () => i.radioOn && Q.showRadio(i);
+        if (l === "radio") {
+          let st = Q.audio.radio?.stations ?? [],
+            sb = A.sub ?? "",
+            f = st.map((e) => e.freq).sort((e, s) => e - s),
+            seek = () => {
+              ((i.radioFreq = f.find((e) => e > i.radioFreq + 0.05) ?? f[0]),
+                Q.audio.play("click", { volume: 0.4 }),
+                show());
+            },
+            pr = sb.startsWith("preset") && f.length ? f[Number(sb.slice(6)) % f.length] : null;
+          (C(J("Радио", "Radio")),
+            g.push(
+              i.radioOn
+                ? `${i.radioFreq.toFixed(1)} MHz \xB7 ${Q.audio.radio?.stationName || J("помехи", "static")}`
+                : J("Выключено", "Off"),
+            ),
+            i.radioOn && pr
+              ? I({
+                  btn: "LMB",
+                  key: "ЛКМ",
+                  label: `${J("Станция", "Station")} ${pr.toFixed(1)}`,
+                  run: () => {
+                    ((i.radioFreq = pr), Q.audio.play("click", { volume: 0.4 }), show());
+                  },
+                })
+              : i.radioOn && sb === "tune" && f.length
+                ? I({ btn: "LMB", key: "ЛКМ", label: J("Следующая станция", "Next station"), run: seek })
+                : I({
+                    btn: "LMB",
+                    key: "ЛКМ",
+                    label: i.radioOn ? J("Выключить", "Turn off") : J("Включить", "Turn on"),
+                    run: () => {
+                      ((i.radioOn = !i.radioOn), Q.audio.play("click", { volume: 0.5 }), show());
+                    },
+                  }),
+            i.radioOn &&
+              f.length &&
+              I({ btn: "E", key: "E", label: J("Поиск станции", "Seek station"), run: seek }),
+            i.radioOn && g.push(J("Колесо — точная настройка", "Wheel — fine tuning")),
+            i.radioOn &&
+              Q.input.mouse.wheel &&
+              ((i.radioFreq = yI(
+                Math.round((i.radioFreq - Q.input.mouse.wheel * 0.1) * 10) / 10,
+                87.5,
+                108,
+              )),
+              show()));
+          return;
+        }
+        if (l === "lights") {
+          let e = [J("Выключены", "Off"), J("Ближний свет", "Low beam"), J("Дальний свет", "High beam")];
+          (C(J("Переключатель фар", "Light switch")),
+            g.push(e[i.lights] ?? e[0]),
+            I({
+              btn: "LMB",
+              key: "ЛКМ",
+              label: J("Переключить", "Switch"),
+              run: () => {
+                ((i.lights = (i.lights + 1) % 3), Q.audio.play("switch", { volume: 0.5 }));
+              },
+            }));
+          return;
+        }
+        if (l === "horn") {
+          (C(J("Клаксон", "Horn")),
+            I({
+              btn: "LMB",
+              key: "ЛКМ",
+              label: J("Сигналить (удерживать)", "Honk (hold)"),
+              hold: 999,
+              tick: () => ((this.hornT = 0.12), this.reachTo(A), !0),
+            }));
+          return;
+        }
+        if (l === "gear") {
+          let e = i.gear < 0 ? "R" : i.gear === 0 ? "N" : String(i.gear);
+          (C(J("Рычаг КПП", "Gear lever")),
+            g.push(`${i.auto ? J("Автомат", "Automatic") : J("Механика", "Manual")} \xB7 ${J("передача", "gear")} ${e}`),
+            i.auto ||
+              (I({ btn: "LMB", key: "ЛКМ", label: J("Передача выше", "Shift up"), run: () => i.shift(1) }),
+              I({ btn: "RMB", key: "ПКМ", label: J("Передача ниже", "Shift down"), run: () => i.shift(-1) })),
+            I({
+              btn: "E",
+              key: "E",
+              label: i.auto ? J("Режим: механика", "Mode: manual") : J("Режим: автомат", "Mode: automatic"),
+              run: () => {
+                ((i.auto = !i.auto), Q.audio.play("switch", { volume: 0.4 }));
+              },
+            }));
+          return;
+        }
+        (C(J("Ручной тормоз", "Handbrake")),
+          g.push(i.handbrake ? J("Затянут", "Engaged") : J("Отпущен", "Released")),
+          I({
+            btn: "LMB",
+            key: "ЛКМ",
+            label: i.handbrake ? J("Отпустить", "Release") : J("Затянуть", "Pull"),
+            run: () => {
+              ((i.handbrake = !i.handbrake), Q.audio.play("ratchet", { volume: 0.45 }));
+            },
+          }));
       }
       itemName(A) {
         let I = this.g.ui.lang;
@@ -64939,7 +65123,10 @@ registerProcessor('engine-proc', EngineProc);
           I.pressedA("headlights") &&
             ((C.lights = (C.lights + 1) % 3),
             this.audio.play("switch", { volume: 0.5 })),
-          (C.horn = I.down("horn") && !!C.parts.battery && C.charge > 0.05),
+          (C.horn =
+            (I.down("horn") || this.interaction.hornT > 0) &&
+            !!C.parts.battery &&
+            C.charge > 0.05),
           C.auto ||
             (I.pressedA("shiftUp") && C.shift(1),
             I.pressedA("shiftDown") && C.shift(-1))),
@@ -64976,7 +65163,9 @@ registerProcessor('engine-proc', EngineProc);
           C = this.player;
         (g &&
           ((this.journey.playTime += A),
-          !C.dead && !this.sleepSeq && C.look(I, A),
+          !C.dead &&
+            !this.sleepSeq &&
+            (this.interaction.rotateCarried(I), C.look(I, A)),
           this.handleCarInput(A),
           this.interaction.update(A),
           C.car &&
