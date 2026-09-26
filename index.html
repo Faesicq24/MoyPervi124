@@ -30420,14 +30420,14 @@ uniform vec2 uOriginMod;`,
           transparent: !0,
           opacity: 0.3,
           depthWrite: !1,
-          envMapIntensity: 1.4,
+          envMapIntensity: 1.1,
           side: OI,
         })),
         (this.glass.onBeforeCompile = (g) => {
           g.fragmentShader = g.fragmentShader.replace(
             "#include <opaque_fragment>",
             `{ float ndv = abs(dot(normal, normalize(-vViewPosition)));
-           diffuseColor.a = mix(diffuseColor.a, 0.62, pow(1.0 - ndv, 3.0)); }
+           diffuseColor.a = mix(diffuseColor.a, 0.5, pow(1.0 - ndv, 3.0)); }
         #include <opaque_fragment>`,
           );
         }),
@@ -33847,10 +33847,12 @@ void main(){
         let I = this.nR,
           g = Fg(150, 900, A),
           C = I.noise(A / 5200, 1.7) * 520 + I.noise(A / 2100, 4.1) * 150,
-          Q = I.noise(A / 950, 8.3) * 48 * (0.6 + 0.4 * I.noise(A / 4e3, 2.2)),
+          Q = I.noise(A / 950, 8.3) * 70 * (0.6 + 0.4 * I.noise(A / 4e3, 2.2)),
           i = I.noise(A / 360, 12.9) * 5,
+          // Winding stretches with real bends alternate with long straights.
+          W = I.noise(A / 400, 19.1) * 42 * Fg(-0.15, 0.45, I.noise(A / 2600, 7.7)),
           E = I.noise(0 / 5200, 1.7) * 520 + I.noise(0 / 2100, 4.1) * 150;
-        return (C + Q + i - E) * g;
+        return (C + Q + i + W - E) * g;
       }
       roadDX(A) {
         return this.roadX(A + 0.5) - this.roadX(A - 0.5);
@@ -33895,10 +33897,25 @@ void main(){
           ((C += this.baseHeight(this.roadX(E), E) * t), (Q += t));
         }
         return (
-          (I = C / Q),
+          (I = C / Q + this.roadHills(g)),
           this.roadYCache.size > 2e5 && this.roadYCache.clear(),
           this.roadYCache.set(A, I),
           I
+        );
+      }
+      // Rolling hills plus occasional crests you can catch air on; flat near home.
+      roadHills(A) {
+        let I = Fg(300, 1100, A);
+        if (I <= 0) return 0;
+        let g = this.nR.noise(A / 340, 31.7) * 2.4 + this.nR.noise(A / 150, 44.1) * 0.6,
+          C = Math.floor(A / 800),
+          Q = A - (C * 800 + 400 + (bn(C, this.seed, 71) - 0.5) * 300),
+          i = 26 + bn(C, this.seed, 72) * 12;
+        return (
+          bn(C, this.seed, 73) < 0.45 &&
+            Math.abs(Q) < i &&
+            (g += (1.8 + bn(C, this.seed, 74) * 1.6) * 0.5 * (1 + Math.cos((Math.PI * Q) / i))),
+          g * I
         );
       }
       baseHeight(A, I) {
@@ -36163,6 +36180,20 @@ float rSand = 0.0;`,
         this.add(A, s),
         o && this.col(I / 2, g / 2, C / 2, Q, i, E, t));
     }
+    // Plank deck tilted along local z from (C, Q) to (i, E); the collider gets the same pitch.
+    slab(A, I, g, C, Q, i, E, t = 0, o = !0) {
+      let e = i - C,
+        s = E - Q,
+        a = Math.hypot(e, s),
+        n = -Math.atan2(s, e),
+        r = (Q + E) / 2 - (Math.cos(n) * g) / 2,
+        c = (C + i) / 2 - (Math.sin(n) * g) / 2,
+        h = cQ(I, g, a + 0.02, 1);
+      (h.rotateX(n),
+        h.translate(t, r, c),
+        this.add(A, h),
+        o && this.cols.push({ hx: I / 2, hy: g / 2, hz: a / 2, x: t, y: r, z: c, ry: 0, rx: n }));
+    }
     wall(A, I, g, C, Q, i, E, t = [], o = 0, e = 2, s) {
       let a = Math.hypot(C - I, Q - g),
         n = (C - I) / a,
@@ -36600,6 +36631,11 @@ float rSand = 0.0;`,
     tower: { hw: 6, hd: 6 },
     homestead: { hw: 17, hd: 15 },
     shack: { hw: 4, hd: 4 },
+    ramp: { hw: 3.2, hd: 14 },
+    rocks: { hw: 8, hd: 7 },
+    camp: { hw: 5, hd: 4 },
+    junkyard: { hw: 8, hd: 7 },
+    windpump: { hw: 5, hd: 4 },
   };
   function ce(B, A, I, g, C = 512, Q = 256, i = KB) {
     return _n("sign:" + B, () => {
@@ -36706,7 +36742,212 @@ float rSand = 0.0;`,
         return nd(A, g, I);
       case "shack":
         return ad(A, g, I);
+      case "ramp":
+        return rampPoi(A, g, I);
+      case "rocks":
+        return rocksPoi(A, g, I);
+      case "camp":
+        return campPoi(A, g, I);
+      case "junkyard":
+        return junkPoi(A, g, I);
+      case "windpump":
+        return windPoi(A, g, I);
     }
+  }
+  // Wooden jump ramp beside the road (local z runs along the road): curved kicker + landing, or a double hump.
+  function rampPoi(B, A, I) {
+    let g = I.chance(0.6),
+      C = I.range(3.8, 4.6),
+      Q = g ? I.range(1.05, 1.45) : I.range(0.75, 1.05),
+      i = g
+        ? [
+            [
+              [-11, 0],
+              [-7.5, 0.3 * Q],
+              [-4.5, Q],
+            ],
+            [
+              [4, 0.85 * Q],
+              [12, 0],
+            ],
+          ]
+        : [
+            [
+              [-7, 0],
+              [-2, Q],
+              [2, Q],
+              [7, 0],
+            ],
+          ],
+      E = A.painted("#b0321e", 0.7, 0),
+      t = A.painted("#e6e0d2", 0.7, 0),
+      o = (s, a) => {
+        for (let n = 0; n < 3; n++)
+          B.add(A.tire, new VA(0.34, 0.34, 0.22, 14).translate(s, 0.11 + n * 0.22, a));
+        B.col(0.34, 0.33, 0.34, s, 0.33, a, 0);
+      };
+    for (let s of i) {
+      for (let n = 0; n < s.length - 1; n++) {
+        let [r, c] = s[n],
+          [h, D] = s[n + 1],
+          l = Math.max(c, D) / 2;
+        B.slab(A.woodLight, C, 0.12, r, c, h, D);
+        for (let U of [-1, 1]) l > 0.02 && B.col(0.06, l, (h - r) / 2, (U * C) / 2, l, (r + h) / 2, 0);
+      }
+      for (let n of [-1, 1])
+        B.add(
+          A.woodDark,
+          AQ(
+            s.map(([r, c]) => [new y((n * C) / 2, 0, r), new y((n * C) / 2, Math.max(c, 0.01), r)]),
+            () => new y(n, 0, 0),
+          ),
+        );
+      let a = s[0],
+        n = s[s.length - 1];
+      (a[1] > 0.05 && B.box(A.woodDark, C, a[1], 0.1, 0, a[1] / 2, a[0] + 0.05, 0, !0),
+        n[1] > 0.05 && B.box(A.woodDark, C, n[1], 0.1, 0, n[1] / 2, n[0] - 0.05, 0, !0));
+    }
+    let e = g ? [-4.85, 0.3 * Q + (0.7 * Q * 2.65) / 3, -4.5, Q] : [-2, Q, -1.6, Q];
+    for (let s = 0; s < 6; s++)
+      B.slab(s % 2 ? t : E, C / 6, 0.126, e[0], e[1], e[2], e[3], -C / 2 + (C / 6) * (s + 0.5), !1);
+    let s = i[0][0][0],
+      a = i[i.length - 1][i[i.length - 1].length - 1][0];
+    for (let n of [-1, 1]) (o(n * (C / 2 + 0.7), s + 1.2), o(n * (C / 2 + 0.7), a - 1.2));
+    let n = new cA(cQ(1.7, 0.85, 0.06, 1), [
+      A.metalDark,
+      A.metalDark,
+      A.metalDark,
+      A.metalDark,
+      A.metalDark,
+      new oI({
+        map: ce("ramp", ["ТРАМПЛИН", "ДЕРЖИСЬ КРЕПЧЕ"], "#e8c21c", "#1a1a1a"),
+        roughness: 0.7,
+      }),
+    ]);
+    (n.position.set(0, 1.75, s - 4),
+      (n.castShadow = !0),
+      B.extra.push(n),
+      B.box(A.metalDark, 0.08, 1.4, 0.08, 0, 0.7, s - 3.95, 0, !0));
+  }
+  // Boulder cluster next to the road.
+  function rocksPoi(B, A, I) {
+    let g = I.int(4, 8);
+    for (let C = 0; C < g; C++) {
+      let Q = C ? I.range(0.6, 2) : I.range(2.2, 3.4),
+        i = C ? I.range(-7, 7) : 0,
+        E = C ? I.range(-6, 6) : 0,
+        t = new ug(Q, 9, 7),
+        o = t.attributes.position,
+        e = I.int(0, 9999);
+      for (let s = 0; s < o.count; s++) {
+        let a = o.getX(s),
+          n = o.getY(s),
+          r = o.getZ(s),
+          c = 0.8 + 0.32 * bn(Math.round((a * 40) / Q), Math.round((n * 40) / Q) + e, Math.round((r * 40) / Q));
+        o.setXYZ(s, a * c, n * c * 0.7, r * c);
+      }
+      (t.deleteAttribute("normal"),
+        t.rotateY(I.range(0, 6.3)),
+        t.translate(i, Q * 0.42, E),
+        B.add(A.rock, t),
+        B.col(Q * 0.78, Q * 0.52, Q * 0.78, i, Q * 0.42, E, 0));
+    }
+    I.chance(0.35) && B.loot.push({ x: 0, y: 0.2, z: 3.4, table: "shelf", spread: 1.2, chance: 0.5 });
+  }
+  // Abandoned campsite: A-frame tent, fire pit, stools and leftovers.
+  function campPoi(B, A, I) {
+    let g = A.fabric(I.pick(["#6a7a4a", "#8a5a3a", "#4a6a8a", "#9a8a5a"])),
+      C = 1.25,
+      Q = 1.2,
+      i = 1.3,
+      E = (e, s) => (B.add(g, AQ(e, s)), B.add(g, AQ(e, (a) => s(a).negate())));
+    for (let e of [-1, 1])
+      E(
+        [
+          [new y(0, i, -Q), new y(e * C, 0.02, -Q)],
+          [new y(0, i, Q), new y(e * C, 0.02, Q)],
+        ],
+        () => new y(e, 1, 0),
+      );
+    (E(
+      [
+        [new y(-C, 0.02, -Q), new y(0, i, -Q)],
+        [new y(-C, 0.02, -Q), new y(C, 0.02, -Q)],
+      ],
+      () => new y(0, 0, -1),
+    ),
+      B.col(C * 0.8, i / 2, Q, 0, i / 2, 0, 0));
+    let t = 2.8,
+      o = 1.4;
+    for (let e = 0; e < 9; e++) {
+      let s = (e / 9) * Math.PI * 2,
+        a = new ug(0.13, 6, 4);
+      (a.scale(1, 0.7, 1), a.translate(t + Math.cos(s) * 0.5, 0.06, o + Math.sin(s) * 0.5), B.add(A.rock, a));
+    }
+    for (let e = 0; e < 3; e++) {
+      let s = new VA(0.05, 0.05, 0.7, 7);
+      (s.rotateZ(Math.PI / 2), s.rotateY((e / 3) * Math.PI + 0.3), s.translate(t, 0.08 + e * 0.04, o), B.add(A.woodDark, s));
+    }
+    for (let [e, s] of [
+      [1.9, 2.5],
+      [3.9, 0.5],
+    ])
+      B.box(A.woodRaw, 0.36, 0.42, 0.36, e, 0.21, s, I.range(0, 1.5), !0);
+    (B.items.push({ id: I.pick(["beans", "stew"]), x: 0.3, y: 0.25, z: 0.4 }),
+      I.chance(0.5) &&
+        B.items.push({
+          id: "canister",
+          x: -1.9,
+          y: 0.3,
+          z: 1.4,
+          state: { liquid: "petrol", amount: +I.range(2, 6).toFixed(1), color: "#a8321e" },
+        }),
+      B.loot.push({ x: 0, y: 0.1, z: -0.2, table: "kitchen", spread: 0.6, chance: 0.7 }));
+  }
+  // Scrap yard: stacked containers, tyre piles, barrels and a couple of wrecks.
+  function junkPoi(B, A, I) {
+    (B.box(A.corrugatedRust, 2.4, 2.5, 6, -5, 1.25, -2, I.range(-0.2, 0.2), !0, 1),
+      I.chance(0.6) && B.box(A.corrugatedRust, 2.4, 2.5, 6, -5.2, 3.75, -1.8, I.range(-0.3, 0.3), !0, 1));
+    for (let g = I.int(5, 9); g > 0; g--) {
+      let C = I.range(-2, 7),
+        Q = I.range(-5, 5),
+        i = I.int(1, 5);
+      for (let E = 0; E < i; E++) B.add(A.tire, new VA(0.34, 0.34, 0.22, 14).translate(C, 0.11 + E * 0.22, Q));
+      B.col(0.34, i * 0.11, 0.34, C, i * 0.11, Q, 0);
+    }
+    for (let g = I.int(3, 7); g > 0; g--) {
+      let C = I.range(-3, 6),
+        Q = I.range(-5, 5);
+      (B.add(A.rust, new VA(0.29, 0.29, 0.88, 14).translate(C, 0.44, Q)), B.col(0.29, 0.44, 0.29, C, 0.44, Q, 0));
+    }
+    for (let g = I.int(1, 3), C = 0; C < g; C++)
+      B.wrecks.push({ x: I.range(1, 6), z: I.range(-4, 3) + C * 2.4, ry: I.range(-3, 3), parts: I.range(0.2, 0.6) });
+    B.loot.push({ x: -3.4, y: 0.1, z: -2, table: "shelf", spread: 2, chance: 0.6 });
+  }
+  // Farm windpump: lattice tower with a fan wheel, water tank and trough.
+  function windPoi(B, A, I) {
+    let g = I.range(7, 9),
+      C = A.metalBare;
+    for (let [Q, i] of [
+      [-1, -1],
+      [1, -1],
+      [-1, 1],
+      [1, 1],
+    ])
+      B.box(C, 0.1, g, 0.1, Q * 0.9, g / 2, i * 0.9, 0, !0);
+    for (let Q = 1; Q < g; Q += 1.8)
+      for (let i of [-0.9, 0.9]) (B.box(C, 1.9, 0.06, 0.06, 0, Q, i, 0, !1), B.box(C, 0.06, 0.06, 1.9, i, Q, 0, 0, !1));
+    B.box(A.woodDark, 2.2, 0.1, 2.2, 0, g, 0, 0, !1);
+    for (let Q = 0; Q < 14; Q++) {
+      let i = cQ(0.22, 1.35, 0.03, 1);
+      (i.translate(0, 0.95, 0), i.rotateZ((Q / 14) * Math.PI * 2), i.translate(0, g + 1.3, 0.75), B.add(C, i));
+    }
+    (B.add(A.metalDark, new VA(0.18, 0.18, 0.3, 12).rotateX(Math.PI / 2).translate(0, g + 1.3, 0.6)),
+      B.box(C, 0.06, 0.06, 1.8, 0, g + 1.3, -0.4, 0, !1),
+      B.box(A.painted("#b8b0a0", 0.7, 0.3), 0.05, 0.9, 1.1, 0, g + 1.3, -1.3, 0, !1),
+      B.add(A.metalDark, new VA(1.4, 1.4, 1.6, 20).translate(3.4, 0.8, 1.2)),
+      B.col(1.4, 0.8, 1.4, 3.4, 0.8, 1.2, 0),
+      B.box(A.concrete, 3, 0.45, 0.8, 3.2, 0.22, -1.4, 0, !0));
   }
   function Bd(B, A, I) {
     B.floor(A.concrete, 0, 0, 24, 18, 0.02, 0.2, 3);
@@ -49970,12 +50211,13 @@ varying vec3 vONrm;`,
   }
   function il(B, A) {
     let I = {};
+    // The rear door's side moulding must stop before the wheel-arch cut-out, otherwise it hangs over the tyre.
     m(
       I,
       "black",
       ...(A
         ? jr(B, V.zDoorSplit + 0.012, V.zHood - 0.012)
-        : jr(B, V.zDoorR0 + 0.012, V.zDoorSplit - 0.012)),
+        : jr(B, UQ.r1 + 0.02, V.zDoorSplit - 0.012)),
     );
     let g = A ? V.zDoorSplit + 0.15 : V.zDoorR0 + 0.16,
       { p: C, n: Q } = ei(Cg(g), Bg(0.905)(Cg(g)), B),
@@ -51522,7 +51764,8 @@ varying vec3 vONrm;`,
       g
     );
   }
-  var KQ = { frontX: 0.42, frontZ: -0.38, rearZ: -1.16 };
+  // Front seats sit under the B-pillar (they used to be ~10 cm too far back, visible in the rear door window).
+  var KQ = { frontX: 0.42, frontZ: -0.28, rearZ: -1.1 };
   function Dl(B) {
     let A = {},
       I = KQ.frontZ,
@@ -51544,7 +51787,7 @@ varying vec3 vONrm;`,
       m(A, "seat", i(0.09, 0.065, 0.46, 0.03, -0.205, 0.07, 0)),
       m(A, "seatInsert", i(0.3, 0.014, 0.42, 0.006, 0, 0.056, 0.01)));
     let E = kA(B, uC + 0.22, I - 0.22),
-      o = new TA().makeRotationX(-0.24).setPosition(E),
+      o = new TA().makeRotationX(-0.2).setPosition(E),
       e = (s) => s.applyMatrix4(o);
     (m(A, "seat", e(fA(0.5, 0.58, 0.11, 0.045, kA(0, 0.3, -0.02)))),
       m(A, "seat", e(fA(0.09, 0.5, 0.07, 0.03, kA(0.205, 0.28, 0.045)))),
@@ -51556,45 +51799,47 @@ varying vec3 vONrm;`,
     return (m(A, "seat", e(fA(0.27, 0.16, 0.1, 0.04, kA(0, 0.73, -0.015)))), A);
   }
   function Kk() {
-    let B = {};
-    (m(B, "carpet", fA(1.08, 0.2, 0.15, 0.02, kA(0, uC + 0.1, -0.95 - 0.08))),
-      m(
-        B,
-        "seat",
-        fA(
-          1.1,
-          0.12,
-          -0.95 - -1.38 + 0.03,
-          0.05,
-          kA(0, 0.585 - 0.06, (-0.95 + -1.38) / 2),
-        ),
-      ));
-    for (let E of [-0.36, 0, 0.36])
-      m(
-        B,
-        "seatInsert",
-        fA(
-          0.3,
-          0.014,
-          0.38,
-          0.006,
-          kA(E, 0.585 + 0.002, (-0.95 + -1.38) / 2 + 0.01),
-        ),
-      );
-    let C = kA(0, 0.585 - 0.03, -1.38 + 0.02),
-      Q = new TA().makeRotationX(-0.38).setPosition(C),
-      i = (E) => E.applyMatrix4(Q);
-    m(B, "seat", i(fA(1.1, 0.48, 0.12, 0.05, kA(0, 0.25, -0.04))));
-    for (let E of [-0.36, 0.36])
-      m(B, "seatInsert", i(fA(0.3, 0.38, 0.014, 0.006, kA(E, 0.26, 0.024))));
-    m(B, "seatInsert", i(fA(0.26, 0.38, 0.014, 0.006, kA(0, 0.26, 0.024))));
-    for (let E of [1, -1])
-      m(B, "seat", fA(0.22, 0.12, 0.3, 0.04, kA(E * 0.66, 0.93, -1.53), -0.3));
+    // Rear bench: tilted cushion, reclined backrest, two headrests and side bolsters over the arches.
+    let B = {},
+      A = -0.86,
+      I = -1.32,
+      g = 0.58;
+    m(B, "carpet", fA(1.12, 0.22, 0.12, 0.02, kA(0, uC + 0.11, A - 0.07)));
+    let C = new TA().makeRotationX(-0.06).setPosition(kA(0, g - 0.06, (A + I) / 2)),
+      Q = (t) => t.applyMatrix4(C);
+    m(B, "seat", Q(fA(1.16, 0.12, A - I + 0.02, 0.05, kA(0, 0, 0))));
+    for (let t of [-0.37, 0, 0.37])
+      m(B, "seatInsert", Q(fA(t ? 0.32 : 0.26, 0.012, 0.38, 0.005, kA(t, 0.061, 0.01))));
+    let i = new TA().makeRotationX(-0.3).setPosition(kA(0, g - 0.04, I + 0.03)),
+      E = (t) => t.applyMatrix4(i);
+    m(B, "seat", E(fA(1.16, 0.5, 0.12, 0.05, kA(0, 0.26, -0.05))));
+    for (let t of [-0.37, 0, 0.37])
+      m(B, "seatInsert", E(fA(t ? 0.32 : 0.26, 0.4, 0.012, 0.005, kA(t, 0.27, 0.012))));
+    for (let t of [-0.37, 0.37]) {
+      m(B, "seat", E(fA(0.25, 0.13, 0.085, 0.04, kA(t, 0.62, -0.05))));
+      for (let o of [-0.06, 0.06])
+        m(B, "chrome", E(vC(0.005, 0.005, 0.08, kA(t + o, 0.53, -0.05))));
+    }
+    for (let t of [1, -1])
+      m(B, "seat", E(fA(0.16, 0.36, 0.16, 0.05, kA(t * 0.66, 0.2, -0.02))));
     return B;
   }
   function Gk() {
     let B = {};
-    return (DR(B), lR(B), SR(B), wR(B), yR(B), B);
+    return (DR(B), lR(B), SR(B), wR(B), yR(B), aPillarTrim(B), B);
+  }
+  // Straight interior A-pillar covers: the loft seam between windshield and door glass is curved,
+  // which from the driver's seat read as a bent, warped pillar.
+  function aPillarTrim(B) {
+    let A = gg.glassLo + 0.015,
+      I = gg.glassHi - 0.008,
+      g = (C, Q, i, E) => rg.point(Q, i, C, new y()).addScaledVector(_y(Q, i, C), E),
+      C = UA.gA - 0.014,
+      Q = UA.gW + 0.012;
+    for (let i of [1, -1]) {
+      let E = (t) => [g(i, C, t, -0.004), g(i, C, t, -0.026), g(i, Q, t, -0.026), g(i, Q, t, -0.004)];
+      m(B, "trim", AQ([E(A), E(I)], (t) => new y(0, 1.1, -0.2).sub(t)));
+    }
   }
   var RA = (B, A, I) => new y(B, A, I);
   function EB(B, A, I, g = 20) {
@@ -53204,13 +53449,13 @@ varying vec3 vONrm;`,
             this.cuboid("bumper_r", 0.86, 0.12, 0.06, 0, 0.5, -2.8),
           ),
           this.setCol("seat_d", !!A.seat_d, () =>
-            this.cuboid("seat_d", 0.25, 0.08, 0.25, 0.42, 0.44, -0.38),
+            this.cuboid("seat_d", 0.25, 0.08, 0.25, 0.42, 0.44, -0.28),
           ),
           this.setCol("seat_p", !!A.seat_p, () =>
-            this.cuboid("seat_p", 0.25, 0.08, 0.25, -0.42, 0.44, -0.38),
+            this.cuboid("seat_p", 0.25, 0.08, 0.25, -0.42, 0.44, -0.28),
           ),
           this.setCol("seat_r", !!A.seat_r, () =>
-            this.cuboid("seat_r", 0.56, 0.08, 0.22, 0, 0.5, -1.16),
+            this.cuboid("seat_r", 0.56, 0.08, 0.22, 0, 0.5, -1.1),
           ));
       }
       updateMass() {
@@ -54036,9 +54281,9 @@ varying vec3 vONrm;`,
           case "radiator":
             return wl.radiator.clone();
           case "driver":
-            return new y(0.42, 1.2, -0.46);
+            return new y(0.42, 1.2, -0.36);
           case "passenger":
-            return new y(-0.42, 1.2, -0.46);
+            return new y(-0.42, 1.2, -0.36);
           case "exhaust":
             return new y(-0.44, 0.27, -2.92);
           default:
@@ -54136,15 +54381,22 @@ varying vec3 vONrm;`,
         let g = this.c.fn,
           C = new vI(gi(A, this.c.seed, 911)),
           Q = (i, E, t, o = 0) => {
+            // Keep structures off road crests: slide along the road to a flat stretch nearby.
+            if (i !== "homestead")
+              for (let k of [0, 40, -40, 80, -80])
+                if (Math.abs(g.roadY(E + k + 20) - g.roadY(E + k - 20)) < 1) {
+                  E += k;
+                  break;
+                }
             let e = wc[i],
               s = g.roadDX(E),
               a = Math.hypot(s, 1),
               n = -1 / a,
               r = s / a,
-              c = t * (UB + e.hd + 6 + o),
+              c = t * (i === "ramp" ? UB + e.hw + 1.4 : UB + e.hd + 6 + o),
               h = g.roadX(E) + n * c,
               D = E + r * c,
-              U = Math.atan2(s, 1) + (t > 0 ? Math.PI / 2 : -Math.PI / 2),
+              U = Math.atan2(s, 1) + (i === "ramp" ? 0 : t > 0 ? Math.PI / 2 : -Math.PI / 2),
               S = g.roadY(E) - 0.02;
             I.push({
               key: `p${A}_${I.length}`,
@@ -54165,17 +54417,22 @@ varying vec3 vONrm;`,
           if (A === E || A === 2) Q("station", t + C.range(60, 140), C.sign());
           else {
             let o = C.weighted([
-              ["none", 40],
-              ["wrecks", 14],
-              ["garage", 9],
-              ["house", 9],
+              ["none", 22],
+              ["wrecks", 12],
+              ["garage", 8],
+              ["house", 8],
               ["trailer", 5],
-              ["shack", 6],
-              ["billboard", 6],
+              ["shack", 5],
+              ["billboard", 5],
               ["busstop", 3],
               ["military", 2.5],
               ["motel", 1.8],
               ["tower", 2.2],
+              ["ramp", 11],
+              ["rocks", 8],
+              ["camp", 5],
+              ["junkyard", 4],
+              ["windpump", 4],
             ]);
             (o !== "none" &&
               Q(
@@ -54186,7 +54443,10 @@ varying vec3 vONrm;`,
               ),
               o !== "billboard" &&
                 C.chance(0.08) &&
-                Q("billboard", t + C.range(10, 190), C.sign(), 2));
+                Q("billboard", t + C.range(10, 190), C.sign(), 2),
+              o !== "ramp" &&
+                C.chance(0.14) &&
+                Q("ramp", t + C.range(20, 180), C.sign()));
           }
         }
         if ((this.plans.set(A, I), this.plans.size > 400))
@@ -54314,6 +54574,7 @@ varying vec3 vONrm;`,
         let I = A.plan,
           g = A.kit.cols.map((C) => {
             let Q = new nI().setFromAxisAngle(new y(0, 1, 0), C.ry);
+            C.rx && Q.multiply(new nI().setFromAxisAngle(new y(1, 0, 0), C.rx));
             return _I.ColliderDesc.cuboid(C.hx, C.hy, C.hz)
               .setTranslation(C.x, C.y, C.z)
               .setRotation({ x: Q.x, y: Q.y, z: Q.z, w: Q.w })
