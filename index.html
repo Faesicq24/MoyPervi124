@@ -36824,10 +36824,12 @@ float rSand = 0.0;`,
         roughness: 0.7,
       }),
     ]);
-    (n.position.set(0, 1.75, s - 4),
+    // Beside the run-up, not on it.
+    let r = -(C / 2 + 1.5);
+    (n.position.set(r, 1.75, s + 0.6),
       (n.castShadow = !0),
       B.extra.push(n),
-      B.box(A.metalDark, 0.08, 1.4, 0.08, 0, 0.7, s - 3.95, 0, !0));
+      B.box(A.metalDark, 0.08, 1.4, 0.08, r, 0.7, s + 0.65, 0, !0));
   }
   // Boulder cluster next to the road.
   function rocksPoi(B, A, I) {
