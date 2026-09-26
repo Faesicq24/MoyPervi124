@@ -1,0 +1,9 @@
+{
+  "name": "vspyshka-render",
+  "private": true,
+  "type": "module",
+  "description": "Offline renderer for the VSPYSHKA pixel cartoon",
+  "dependencies": {
+    "puppeteer": "^23.6.0"
+  }
+}

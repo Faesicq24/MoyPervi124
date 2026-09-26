@@ -1,0 +1,78 @@
+name: Render VSPYSHKA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'multik/**'
+      - '.github/workflows/render-multik.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: render-multik
+  cancel-in-progress: true
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+      - name: Install Puppeteer
+        working-directory: multik/render
+        run: npm install --no-audit --no-fund
+
+      - name: Smoke test (whole timeline every 0.2 s)
+        working-directory: multik/render
+        env:
+          MODE: smoke
+        run: node render.mjs
+
+      - name: Render video
+        working-directory: multik/render
+        env:
+          MODE: full
+        run: node render.mjs
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vspyshka-mp4
+          path: |
+            multik/render/out/vspyshka.mp4
+            multik/render/out/poster.png
+            multik/render/out/errors.txt
+          retention-days: 30
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          {
+            echo "Мультфильм «ВСПЫШКА», 3:00, 1920x1080, 30 fps, со звуком."
+            echo ""
+            echo "Отрендерено автоматически из папки multik/ (коммит ${GITHUB_SHA::7})."
+            if [ -s multik/render/out/errors.txt ]; then
+              echo ""
+              echo "Ошибки при рендере:"
+              echo '```'
+              cat multik/render/out/errors.txt
+              echo '```'
+            fi
+          } > notes.md
+          gh release delete video-latest --yes --cleanup-tag || true
+          FILES="multik/render/out/vspyshka.mp4"
+          if [ -f multik/render/out/poster.png ]; then FILES="$FILES multik/render/out/poster.png"; fi
+          gh release create video-latest $FILES --title "ВСПЫШКА (готовое видео)" --notes-file notes.md --target "$GITHUB_SHA"

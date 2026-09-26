@@ -1,14 +1,16 @@
-/* VSPYSHKA - player.js: timeline, compositing, transitions, controls, WebM recording */
+/* VSPYSHKA - player.js: timeline, compositing, transitions, controls, WebM recording, offline render hooks (?render=1) */
 (function () {
   'use strict';
-  const M = window.M, W = M.W, H = M.H, OW = 1920, OH = 1080, PX = OW / W;
+  const M = window.M, W = M.W, H = M.H;
+  const Q = new URLSearchParams(location.search), RENDER = Q.has('render');
+  const PX = RENDER ? Math.max(1, Math.min(4, parseInt(Q.get('px') || '4', 10) || 4)) : 4, OW = W * PX, OH = H * PX;
   const scenes = M.SCENES; let total = 0;
   scenes.forEach((s) => { s.start = total; total += s.dur; });
   M.TOTAL = total;
   const out = document.getElementById('screen'); out.width = OW; out.height = OH;
   const og = out.getContext('2d');
   const world = M.canvas(W, H), ui = M.canvas(W, H), small = M.canvas(120, 68), bufA = M.canvas(OW, OH), bufB = M.canvas(OW, OH);
-  scenes.forEach((s) => { try { if (s.au) s.au(M.A, s.start); } catch (e) { console.warn('audio cues', s.name, e); } });
+  scenes.forEach((s) => { try { if (s.au) s.au(M.A, s.start); } catch (e) { console.error('audio cues ' + s.name + ': ' + (e && e.stack ? e.stack : e)); } });
   M.A.prepare();
   const sceneAt = (t) => { for (let i = scenes.length - 1; i >= 0; i--) if (t >= scenes[i].start) return i; return 0; };
 
@@ -17,7 +19,7 @@
     g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.imageSmoothingEnabled = false; g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
     u.setTransform(1, 0, 0, 1, 0, 0); u.globalAlpha = 1; u.globalCompositeOperation = 'source-over'; u.imageSmoothingEnabled = false; u.clearRect(0, 0, W, H);
     const cam = { zoom: 1, cx: W / 2, cy: H / 2, bloom: 0, flash: 0, shake: 0 };
-    try { sc.draw(g, lt, cam, u); } catch (e) { if (!sc._err) { sc._err = 1; console.error('scene', sc.name, e); } }
+    try { sc.draw(g, lt, cam, u); } catch (e) { if (!sc._err) { sc._err = 1; console.error('scene ' + sc.name + ' @' + lt.toFixed(2) + ': ' + (e && e.stack ? e.stack : e)); } }
     g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; u.globalAlpha = 1; u.globalCompositeOperation = 'source-over';
     const z = Math.max(1, cam.zoom || 1), sw = W / z, sh = H / z;
     const sx = M.clamp((cam.cx || W / 2) - sw / 2, 0, W - sw), sy = M.clamp((cam.cy || H / 2) - sh / 2, 0, H - sh);
@@ -63,25 +65,36 @@
     if (t > total - 0.8) dither(og, ((t - (total - 0.8)) / 0.8) * 16);
   }
 
+  if (RENDER) { // hooks for multik/render/render.mjs
+    window.__total = total;
+    window.__drawAt = (t) => { frame(t); return true; };
+    window.__frameAt = (t) => { frame(t); return out.toDataURL('image/png'); };
+    window.__prepAudio = async () => { const f = await M.A.renderOffline(total, 44100); window.__wav = M.A.wav(f, 44100); return window.__wav.length; };
+    window.__wavChunk = (i, size) => { const b = window.__wav.subarray(i * size, (i + 1) * size); let s = ''; for (let k = 0; k < b.length; k += 0x8000) s += String.fromCharCode.apply(null, b.subarray(k, k + 0x8000)); return btoa(s); };
+    const st = document.getElementById('start'); if (st) st.style.display = 'none';
+    window.__ready = true;
+    return;
+  }
+
   // ---------- controls ----------
   const $ = (id) => document.getElementById(id);
   const startEl = $('start'), playBtn = $('play'), timeEl = $('time'), seekEl = $('seek'), fillEl = $('fill'), tipEl = $('tip'), muteBtn = $('mute'), fsBtn = $('fs'), recInd = $('rec-ind');
   const fmt = (s) => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
   scenes.forEach((s, i) => { if (i === 0) return; const d = document.createElement('div'); d.className = 'tick'; d.style.left = (s.start / total) * 100 + '%'; seekEl.appendChild(d); });
   let playing = false, started = false, tNow = 7.4, last = performance.now(), useAudio = false, stuck = 0, recorder = null;
-  const q = new URLSearchParams(location.search); if (q.has('t')) { tNow = M.clamp(parseFloat(q.get('t')) || 0, 0, total); started = true; }
+  if (Q.has('t')) { tNow = M.clamp(parseFloat(Q.get('t')) || 0, 0, total); started = true; }
   function play() {
     if (!started) { started = true; tNow = 0; }
     if (tNow >= total - 0.05) tNow = 0;
     useAudio = !!M.A.init(); stuck = 0;
     if (useAudio) M.A.start(tNow);
-    playing = true; last = performance.now(); startEl.style.display = 'none'; playBtn.textContent = '❚❚';
+    playing = true; last = performance.now(); startEl.style.display = 'none'; playBtn.textContent = '\u275a\u275a';
   }
-  function pause() { playing = false; M.A.stopAll(); playBtn.textContent = '▶'; }
+  function pause() { playing = false; M.A.stopAll(); playBtn.textContent = '\u25b6'; }
   function seek(t) { if (!started) started = true; tNow = M.clamp(t, 0, total); if (playing && useAudio) M.A.start(tNow); }
   function ended() {
     if (recorder && recorder.state !== 'inactive') recorder.stop();
-    startEl.style.display = 'flex'; $('bigplay').textContent = '▶ СМОТРЕТЬ СНОВА';
+    startEl.style.display = 'flex'; $('bigplay').textContent = '\u25b6 \u0421\u041c\u041e\u0422\u0420\u0415\u0422\u042c \u0421\u041d\u041e\u0412\u0410';
   }
   function loop(ts) {
     requestAnimationFrame(loop);
@@ -97,9 +110,9 @@
     timeEl.textContent = fmt(started ? tNow : 0) + ' / ' + fmt(total); fillEl.style.width = (started ? tNow / total : 0) * 100 + '%';
   }
   function record() {
-    if (!window.MediaRecorder || !out.captureStream) { alert('Этот браузер не умеет записывать видео. Откройте в Chrome или Edge.'); return; }
+    if (!window.MediaRecorder || !out.captureStream) { alert('\u042d\u0442\u043e\u0442 \u0431\u0440\u0430\u0443\u0437\u0435\u0440 \u043d\u0435 \u0443\u043c\u0435\u0435\u0442 \u0437\u0430\u043f\u0438\u0441\u044b\u0432\u0430\u0442\u044c \u0432\u0438\u0434\u0435\u043e. \u041e\u0442\u043a\u0440\u043e\u0439\u0442\u0435 \u0432 Chrome \u0438\u043b\u0438 Edge.'); return; }
     const types = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
-    const mime = types.find((t) => MediaRecorder.isTypeSupported(t)); if (!mime) { alert('Запись видео не поддерживается.'); return; }
+    const mime = types.find((t) => MediaRecorder.isTypeSupported(t)); if (!mime) { alert('\u0417\u0430\u043f\u0438\u0441\u044c \u0432\u0438\u0434\u0435\u043e \u043d\u0435 \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u0435\u0442\u0441\u044f.'); return; }
     if (playing) pause();
     M.A.init();
     const tracks = out.captureStream(60).getVideoTracks(), as = M.A.recStream(); if (as) as.getAudioTracks().forEach((tr) => tracks.push(tr));
@@ -111,7 +124,7 @@
   }
   $('bigplay').onclick = play; $('recbtn').onclick = record; $('rec').onclick = record;
   playBtn.onclick = () => (playing ? pause() : play());
-  muteBtn.onclick = () => { M.A.setMuted(!M.A.muted); muteBtn.textContent = M.A.muted ? 'БЕЗ ЗВУКА' : 'ЗВУК'; };
+  muteBtn.onclick = () => { M.A.setMuted(!M.A.muted); muteBtn.textContent = M.A.muted ? '\u0411\u0415\u0417 \u0417\u0412\u0423\u041a\u0410' : '\u0417\u0412\u0423\u041a'; };
   fsBtn.onclick = () => { const st = $('stage'); if (document.fullscreenElement) document.exitFullscreen(); else if (st.requestFullscreen) st.requestFullscreen(); };
   const seekAt = (e) => { const r = seekEl.getBoundingClientRect(); return M.clamp((e.clientX - r.left) / r.width, 0, 1) * total; };
   let dragging = false;
